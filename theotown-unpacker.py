@@ -1,17 +1,22 @@
+import argparse
 import io
 import json
-import os.path
+import os
 import pathlib
 import re
 import time
 import zipfile
 
-from tkinter import Tk
-from tkinter.filedialog import askopenfilename, askdirectory
+# check if we're running in termux. deny GUI if we are
+_is_termux = "TERMUX_VERSION" in os.environ
+if not _is_termux:
+    from tkinter import Tk
+    from tkinter.filedialog import askopenfilename, askdirectory
+
 from hashlib import md5
 
 
-_debug = True
+_debug = False
 _time_start = time.perf_counter_ns()
 def debug_log(text):
     if not _debug:
@@ -91,7 +96,7 @@ def decrypt_file(file_path: str, apk: zipfile.ZipFile) -> bytearray:
     return dec_buf
 
 
-def main(apk_path: pathlib.Path):
+def main(apk_path: pathlib.Path, output_dir: pathlib.Path):
     apk: zipfile.ZipFile = None
 
     if apk_path.suffix in (".xapks", ".xapk", ".apks"):
@@ -121,11 +126,8 @@ def main(apk_path: pathlib.Path):
     debug_log(f"vi: {file_data['vi']}")
     debug_log(f"id: {file_data['id']}")
 
-    # get output dir
-    output_dir: pathlib.Path = pathlib.Path(askdirectory(title="Select output directory", mustexist=True))
-
     info_log("Decrypting files...")
-    
+
     for file in file_data["files"]:
         if not file["lby"]:
             continue
@@ -186,7 +188,42 @@ def main(apk_path: pathlib.Path):
                 script_out.write(script["code"])
 
 
-if __name__ == "__main__":
-    Tk().withdraw()
+def parse_args():
+    parser = argparse.ArgumentParser()
 
-    main(pathlib.Path(askopenfilename(title="Select TheoTown APK/XAPK/ZIP file")))
+    parser.add_argument(
+        "-o",
+        help="the directory to output to",
+        type=str,
+        metavar="",
+        default=os.getcwd()
+    )
+
+    parser.add_argument(
+        "-v",
+        help="turns verbose logging on",
+        action="store_true",
+        default=False
+    )
+
+    parser.add_argument(
+        "apk_file",
+        help="apk/xapk/apks file to process",
+        type=str
+    )
+
+    args = parser.parse_args()
+
+    return (pathlib.Path(args.apk_file), pathlib.Path(args.o), args.v)
+
+
+if __name__ == "__main__":
+    if _is_termux:
+        xapk_file, output_dir, _debug = parse_args()
+    else:
+        Tk().withdraw()
+
+        xapk_file = pathlib.Path(askopenfilename(title="Select TheoTown APK/XAPK/ZIP file"))
+        output_dir = pathlib.Path(askdirectory(title="Select output directory", mustexist=True))
+
+    main(xapk_file, output_dir)
